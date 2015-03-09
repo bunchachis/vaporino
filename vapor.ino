@@ -1,79 +1,78 @@
-const int analogInPin = A0;
-const int batteryPin = A3;
-const float batDivider = 2.0;
-const float vcc = 4.7;
-const int analogOutPin = 9;
+#include <LiquidCrystal.h>
+
+LiquidCrystal lcd(12, 11, 8, 7, 6, 5);
+
+const int levelPin = A0;
+const int batDivPin = A3;
+const float batDivK = 0.5;
+const float refVoltage = 5.0;
+const int heatPin = 9;
 const int buttonPin = 2;
+const int restestEnablePin = 3;
+const int restestDivPin = A2;
+const float restestDivK = 0.5;
+const float restestRefResistance = 220.0;
+const float heatWireResistance = 0.2;
 
-const int dataPin = 4;
-const int latchPin = 5;
-const int clockPin = 6;
 
-byte segments[10] = {
-	0b11111100, 0b01100000, 0b11011010, 0b11110010, 0b01100110,
-	0b10110110, 0b10111110, 0b11100000, 0b11111110, 0b11110110
-};
-
-void setup() {
+void setup()
+{
 	pinMode(buttonPin, INPUT_PULLUP);
 
-	pinMode(dataPin, OUTPUT);
-	pinMode(latchPin, OUTPUT);
-	pinMode(clockPin, OUTPUT);
+	pinMode(restestEnablePin, OUTPUT);
+
+	lcd.begin(16, 2);
+	lcd.setCursor(0, 0);
+	lcd.print(readHeatResistance());
 }
 
-void loop() {
-	int sensorValue;
-	boolean buttonPressed;
-	int outputValue;
+float readHeatResistance()
+{
+	heat(0);
+
+	digitalWrite(restestEnablePin, HIGH);
+	float resistance = (readBatVoltage() / readRestestVoltage() - 1) * restestRefResistance - heatWireResistance;
+	digitalWrite(restestEnablePin, LOW);
+
+	return resistance;
+}
+
+float readBatVoltage()
+{
+	return readVoltage(batDivPin) / batDivK;
+}
+
+float readRestestVoltage()
+{
+	return readVoltage(restestDivPin) / restestDivK;
+}
+
+float readVoltage(int pin)
+{
+	analogRead(pin);
+	delay(250);
+	return analogRead(pin) * refVoltage / 1023.0;
+}
+
+void heat(int level)
+{
+	analogWrite(heatPin, level);
+}
+
+void loop()
+{
+	int levelValue = analogRead(levelPin);
 	
-	sensorValue = analogRead(analogInPin);
-	
-	buttonPressed = !digitalRead(buttonPin);
+	boolean buttonPressed = !digitalRead(buttonPin);
 	if (buttonPressed) {
-		outputValue = map(sensorValue, 0, 1023, 0, 255);
-		analogWrite(analogOutPin, outputValue);
+		int outputValue = map(levelValue, 0, 1023, 0, 255);
+		heat(outputValue);
 	} else {
-		analogWrite(analogOutPin, 0);
+		heat(0);
 	}
 
-	int bat = analogRead(batteryPin);  
-	print7(bat / 1023.0 * batDivider * vcc);
+	lcd.setCursor(0, 1);
+	lcd.print(readBatVoltage());
 
 	delay(50);
-}
-
-void print7(double number)
-{
-	boolean canShow = true;
-	int preNumber;
-	byte p1 = 0;
-
-	if (number < 100.0) {
-		if (number >= 10.0) {
-			preNumber = (int) floor(number);    
-		} else if (number >= 0.0) {
-			preNumber = (int) floor(number * 10.0);
-			p1 = 1;
-		} else {
-			canShow = false;
-		}
-	} else {
-		canShow = false;
-	}
-
-	digitalWrite(latchPin, LOW);  
-	if (canShow) {
-		if (preNumber == 100) {
-			shiftOut(dataPin, clockPin, LSBFIRST, 0b10000000);
-			shiftOut(dataPin, clockPin, LSBFIRST, 0b10000000);
-		} else {
-			shiftOut(dataPin, clockPin, LSBFIRST, segments[preNumber%10]);
-			shiftOut(dataPin, clockPin, LSBFIRST, segments[preNumber/10] | p1);
-		}
-	} else {
-		shiftOut(dataPin, clockPin, LSBFIRST, 0b00000010);
-		shiftOut(dataPin, clockPin, LSBFIRST, 0b00000010);
-	}
-	digitalWrite(latchPin, HIGH);
 }
