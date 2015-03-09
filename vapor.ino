@@ -11,7 +11,7 @@ const int buttonPin = 2;
 const int restestEnablePin = 3;
 const int restestDivPin = A2;
 const float restestDivK = 0.5;
-const float restestRefResistance = 220.0;
+const float restestRefResistance = 29.0;
 const float heatWireResistance = 0.2;
 
 
@@ -50,7 +50,7 @@ float readRestestVoltage()
 float readVoltage(int pin)
 {
 	analogRead(pin);
-	delay(250);
+	delay(50);
 	return analogRead(pin) * refVoltage / 1023.0;
 }
 
