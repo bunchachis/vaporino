@@ -84,12 +84,13 @@ void loop()
 	lcd.setCursor(10, 1);
 	lcd.print("      ");
 	lcd.setCursor(10, 1);
-	float i = vbat / (rbat + rheat + heatWireResistance);
+	float ipeak = vbat / (rbat + rheat + heatWireResistance);
+	float pheatavg = levelValue / 1023.0 * sq(ipeak) * rheat;
 	if (millis() / 1000 % 4 >= 2) {
-		lcd.print(levelValue / 1023.0 * i * i * rheat);
+		lcd.print(pheatavg);
 		lcd.print('W');
 	} else {
-		lcd.print(levelValue / 1023.0 * i * rheat);
+		lcd.print(sqrt(pheatavg * rheat));
 		lcd.print('V');
 	}
 	
