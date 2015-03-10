@@ -14,6 +14,9 @@ const float restestDivK = 0.5;
 const float restestRefResistance = 29.0;
 const float heatWireResistance = 0.2;
 
+float vbat;
+float rheat;
+float rbat;
 
 void setup()
 {
@@ -21,9 +24,20 @@ void setup()
 
 	pinMode(restestEnablePin, OUTPUT);
 
+	rheat = readHeatResistance();
 	lcd.begin(16, 2);
 	lcd.setCursor(0, 0);
-	lcd.print(readHeatResistance());
+	lcd.print(rheat);
+	lcd.print((char)0xF4);
+
+	lcd.print(' ');
+	vbat = readBatVoltage();
+	heat(255);
+	float vl = readBatVoltage();
+	heat(0);
+	float rbat = (vbat / vl - 1) * rheat;
+	lcd.print(rbat);
+	lcd.print((char)0xF4);
 }
 
 float readHeatResistance()
@@ -62,6 +76,22 @@ void heat(int level)
 void loop()
 {
 	int levelValue = analogRead(levelPin);
+	lcd.setCursor(12, 0);
+	lcd.print("    ");
+	lcd.setCursor(12, 0);
+	lcd.print(map(levelValue, 0, 1023, 0, 100));
+	lcd.print('%');
+	lcd.setCursor(10, 1);
+	lcd.print("      ");
+	lcd.setCursor(10, 1);
+	float i = vbat / (rbat + rheat + heatWireResistance);
+	if (millis() / 1000 % 4 >= 2) {
+		lcd.print(levelValue / 1023.0 * i * i * rheat);
+		lcd.print('W');
+	} else {
+		lcd.print(levelValue / 1023.0 * i * rheat);
+		lcd.print('V');
+	}
 	
 	boolean buttonPressed = !digitalRead(buttonPin);
 	if (buttonPressed) {
@@ -69,10 +99,12 @@ void loop()
 		heat(outputValue);
 	} else {
 		heat(0);
+		vbat = readBatVoltage();
 	}
 
 	lcd.setCursor(0, 1);
 	lcd.print(readBatVoltage());
+	lcd.print('V');
 
 	delay(50);
 }
