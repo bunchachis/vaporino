@@ -1,18 +1,24 @@
 #include <LiquidCrystal.h>
+#include <ooPinChangeInt.h>
+#include <AdaEncoder.h>
 
-LiquidCrystal lcd(12, 11, 8, 7, 6, 5);
+LiquidCrystal lcd(8, 7, 10, 11, 12, 13);
 
-const int levelPin = A0;
 const int batDivPin = A3;
 const float batDivK = 0.5;
 const float refVoltage = 5.0;
-const int heatPin = 9;
+const int heatPin = 3;
 const int buttonPin = 2;
-const int restestEnablePin = 3;
+const int restestEnablePin = 9;
 const int restestDivPin = A2;
 const float restestDivK = 0.5;
 const float restestRefResistance = 29.0;
 const float heatWireResistance = 0.2;
+const int backlightPin = A1;
+
+const int encoderAPin = 6;
+const int encoderBPin = 5;
+AdaEncoder encoder = AdaEncoder('x', encoderAPin, encoderBPin);
 
 float vbat;
 float rheat;
@@ -21,8 +27,9 @@ float rbat;
 void setup()
 {
 	pinMode(buttonPin, INPUT_PULLUP);
-
 	pinMode(restestEnablePin, OUTPUT);
+	pinMode(backlightPin, OUTPUT);
+	digitalWrite(backlightPin, LOW);
 
 	rheat = readHeatResistance();
 	lcd.begin(16, 2);
@@ -73,19 +80,28 @@ void heat(int level)
 	analogWrite(heatPin, level);
 }
 
+byte levelValue = 0;
+
 void loop()
 {
-	int levelValue = analogRead(levelPin);
+	int8_t clicks;
+	AdaEncoder *enc = NULL;
+	enc = AdaEncoder::genie();
+	if (enc != NULL) {
+		levelValue += enc->getClearClicks();
+		levelValue = levelValue % 100;
+	}
+
 	lcd.setCursor(12, 0);
 	lcd.print("    ");
 	lcd.setCursor(12, 0);
-	lcd.print(map(levelValue, 0, 1023, 0, 100));
+	lcd.print(map(levelValue, 0, 100, 0, 100));
 	lcd.print('%');
 	lcd.setCursor(10, 1);
 	lcd.print("      ");
 	lcd.setCursor(10, 1);
 	float ipeak = vbat / (rbat + rheat + heatWireResistance);
-	float pheatavg = levelValue / 1023.0 * sq(ipeak) * rheat;
+	float pheatavg = levelValue / 100.0 * sq(ipeak) * rheat;
 	if (millis() / 1000 % 4 >= 2) {
 		lcd.print(pheatavg);
 		lcd.print('W');
@@ -93,11 +109,10 @@ void loop()
 		lcd.print(sqrt(pheatavg * rheat));
 		lcd.print('V');
 	}
-	
+
 	boolean buttonPressed = !digitalRead(buttonPin);
 	if (buttonPressed) {
-		int outputValue = map(levelValue, 0, 1023, 0, 255);
-		heat(outputValue);
+		heat(map(levelValue, 0, 100, 0, 255));
 	} else {
 		heat(0);
 		vbat = readBatVoltage();
