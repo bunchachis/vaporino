@@ -81,8 +81,10 @@ float readVoltage(int pin)
 	return analogRead(pin) * refVoltage / 1023.0;
 }
 
+int heatLevel = 0;
 void heat(int level)
 {
+	heatLevel = level;
 	analogWrite(heatPin, level);
 }
 
@@ -101,8 +103,7 @@ void loop()
 	boolean changed = false;
 	enc = AdaEncoder::genie();
 	if (enc != NULL) {
-		levelValue += enc->getClearClicks();
-		levelValue = (levelValue + 100) % 100;
+		levelValue = (levelValue + 101 + enc->getClearClicks()) % 101;
 	}
 	
 	button.listen();
@@ -123,7 +124,7 @@ long handleBatVoltage_old_secs = 0;
 void handleBatVoltage()
 {
 	long secs = floor(millis() / 100.0);
-	if (secs != handleBatVoltage_old_secs) {
+	if (secs != handleBatVoltage_old_secs && heatLevel == 0) {
 		vbat = readBatVoltage();
 		handleBatVoltage_old_secs = secs;
 	}
@@ -160,7 +161,7 @@ void handleLCD()
 
 	if (handleLCD_firstTime || handleLCD_old_levelValue != levelValue) {
 		lcd.setCursor(0, 1);
-		lcd.print("   ");
+		lcd.print("    ");
 		lcd.setCursor(0, 1);
 		lcd.print(map(levelValue, 0, 100, 0, 100));
 		lcd.print('%');	
@@ -173,10 +174,10 @@ void handleLCD()
 		lcd.setCursor(5, 1);
 		float ipeak = vbat / (rbat + rheat + heatWireResistance);
 		float pheatavg = levelValue / 100.0 * sq(ipeak) * rheat;
-		lcd.print(pheatavg);
-		lcd.print("W ");
 		lcd.print(sqrt(pheatavg * rheat));
-		lcd.print('V');
+		lcd.print("V ");
+		lcd.print(pheatavg);
+		lcd.print('W');
 	}
 
 	if (handleLCD_firstTime || handleLCD_old_vbat != vbat) {
