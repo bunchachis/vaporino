@@ -13,7 +13,7 @@ const int buttonPin = 2;
 const int restestEnablePin = 9;
 const int restestDivPin = A2;
 const float restestDivK = 0.5;
-const float restestRefResistance = 29.0;
+const float restestRefResistance = 30.0;
 const float heatWireResistance = 0.2;
 const int backlightPin = A1;
 
@@ -49,7 +49,8 @@ void setup()
 	float vl = readBatVoltage();
 	heat(0);
 	float rbat = (vbat / vl - 1) * rheat;
-	lcd.print(rbat);
+	lcd.print((int)(rbat * 1000));
+	lcd.print('m');
 	lcd.print((char)0xF4);
 }
 
