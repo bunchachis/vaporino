@@ -14,7 +14,9 @@ const int restestEnablePin = 9;
 const int restestDivPin = A2;
 const float restestDivK = 0.5;
 const float restestRefResistance = 30.0;
+const float restestFetResistance = 0.04;
 const float heatWireResistance = 0.2;
+const float heatFetResistance = 0.04;
 const int backlightPin = A1;
 
 const int encoderAPin = 6;
@@ -48,7 +50,7 @@ void setup()
 	heat(255);
 	float vl = readBatVoltage();
 	heat(0);
-	float rbat = (vbat / vl - 1) * rheat;
+	float rbat = (vbat / vl - 1) * (rheat + heatWireResistance + heatFetResistance);
 	lcd.print((int)(rbat * 1000));
 	lcd.print('m');
 	lcd.print((char)0xF4);
@@ -59,7 +61,7 @@ float readHeatResistance()
 	heat(0);
 
 	digitalWrite(restestEnablePin, HIGH);
-	float resistance = (readBatVoltage() / readRestestVoltage() - 1) * restestRefResistance - heatWireResistance;
+	float resistance = (readBatVoltage() / readRestestVoltage() - 1) * (restestRefResistance + restestFetResistance) - heatWireResistance;
 	digitalWrite(restestEnablePin, LOW);
 
 	return resistance;
