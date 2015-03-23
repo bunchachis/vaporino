@@ -3,6 +3,8 @@
 #include <AdaEncoder.h>
 #include <Button.h>
 
+//#define DEBUG
+
 LiquidCrystal lcd(8, 7, 10, 11, 12, 13);
 
 const int batDivPin = A3;
@@ -14,9 +16,9 @@ const int restestEnablePin = 9;
 const int restestDivPin = A2;
 const float restestDivK = 0.5;
 const float restestRefResistance = 30.0;
-const float restestFetResistance = 0.04;
-const float heatWireResistance = 0.2;
-const float heatFetResistance = 0.04;
+const float restestFetResistance = 0.05;
+const float heatWireResistance = 0.320;
+const float heatFetResistance = 0.05;
 const int backlightPin = A1;
 
 const int encoderAPin = 6;
@@ -35,22 +37,48 @@ void setup()
 	pinMode(buttonPin, INPUT_PULLUP);
 	pinMode(restestEnablePin, OUTPUT);
 	pinMode(backlightPin, OUTPUT);
-	digitalWrite(backlightPin, LOW);
+	digitalWrite(backlightPin, HIGH);
 	pinMode(encoderBtnPin, INPUT_PULLUP);
 
+	#ifdef DEBUG
+	Serial.begin(9600);
+	Serial.println("---------- Booted ----------");
+	#endif
+	lcd.clear();
+
+	delay(500);
+
 	rheat = readHeatResistance();
+	#ifdef DEBUG
+	Serial.print("Rheat = ");
+	Serial.println(rheat);
+	#endif
 	lcd.begin(16, 2);
 	lcd.setCursor(0, 0);
 	lcd.print(rheat);
 	lcd.setCursor(3, 0);
 	lcd.print((char)0xF4);
 
+	delay(500);
+
 	lcd.print(' ');
 	vbat = readBatVoltage();
+	#ifdef DEBUG
+	Serial.print("VBatUnload = ");
+	Serial.println(vbat);
+	#endif
 	heat(255);
 	float vl = readBatVoltage();
 	heat(0);
-	float rbat = (vbat / vl - 1) * (rheat + heatWireResistance + heatFetResistance);
+	#ifdef DEBUG
+	Serial.print("VBatLoad = ");
+	Serial.println(vl);
+	#endif
+	rbat = (vbat / vl - 1) * (rheat + heatWireResistance + heatFetResistance);
+	#ifdef DEBUG
+	Serial.print("RBat = ");
+	Serial.println(rbat);
+	#endif
 	lcd.print((int)(rbat * 1000));
 	lcd.print('m');
 	lcd.print((char)0xF4);
@@ -61,8 +89,16 @@ float readHeatResistance()
 	heat(0);
 
 	digitalWrite(restestEnablePin, HIGH);
-	float resistance = (readBatVoltage() / readRestestVoltage() - 1) * (restestRefResistance + restestFetResistance) - heatWireResistance;
+	float vb = readBatVoltage();
+	float vr = readRestestVoltage();
 	digitalWrite(restestEnablePin, LOW);
+	#ifdef DEBUG
+	Serial.print("Restest: vbat = ");
+	Serial.println(vb);
+	Serial.print("Restest: vres = ");
+	Serial.println(vr);
+	#endif
+	float resistance = (vb / vr - 1) * (restestRefResistance + restestFetResistance) - heatWireResistance;
 
 	return resistance;
 }
@@ -92,7 +128,7 @@ void heat(int level)
 }
 
 byte levelValue = 0;
-boolean backlight = 1;
+boolean backlight = false;
 
 void loop()
 {
@@ -175,8 +211,25 @@ void handleLCD()
 		lcd.setCursor(5, 1);
 		lcd.print("           ");
 		lcd.setCursor(5, 1);
-		float ipeak = vbat / (rbat + rheat + heatWireResistance);
+		float rsum = rbat + rheat + heatWireResistance + heatFetResistance;
+		#ifdef DEBUG
+		Serial.println("Watts:");
+		Serial.print("vbat = ");
+		Serial.println(vbat);
+		Serial.print("rsum = ");
+		Serial.println(rsum);
+		#endif
+		float ipeak = vbat / rsum;
+		#ifdef DEBUG
+		Serial.print("ipeak = ");
+		Serial.println(ipeak);
+		#endif
 		float pheatavg = levelValue / 100.0 * sq(ipeak) * rheat;
+		#ifdef DEBUG
+		Serial.print("pheatavg = ");
+		Serial.println(pheatavg);
+		Serial.println("/ Watts");
+		#endif
 		lcd.print(sqrt(pheatavg * rheat));
 		lcd.print("V ");
 		lcd.print(pheatavg);
