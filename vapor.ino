@@ -21,8 +21,8 @@ const float heatWireResistance = 0.320;
 const float heatFetResistance = 0.05;
 const int backlightPin = 9;
 
-const int encoderAPin = 6;
-const int encoderBPin = 5;
+const int encoderAPin = 5;
+const int encoderBPin = 6;
 const int encoderBtnPin = 4;
 AdaEncoder encoder = AdaEncoder('x', encoderAPin, encoderBPin);
 Button encoderBtn = Button(encoderBtnPin, LOW);
