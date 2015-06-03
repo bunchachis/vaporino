@@ -12,14 +12,14 @@ const float batDivK = 0.5;
 const float refVoltage = 5.0;
 const int heatPin = 3;
 const int buttonPin = 2;
-const int restestEnablePin = 9;
+const int restestEnablePin = A0;
 const int restestDivPin = A2;
 const float restestDivK = 0.5;
-const float restestRefResistance = 30.0;
+const float restestRefResistance = 4.0;
 const float restestFetResistance = 0.05;
 const float heatWireResistance = 0.320;
 const float heatFetResistance = 0.05;
-const int backlightPin = A1;
+const int backlightPin = 9;
 
 const int encoderAPin = 6;
 const int encoderBPin = 5;
@@ -32,16 +32,21 @@ float vbat;
 float rheat;
 float rbat;
 
+boolean backlighted = false;
+boolean powered = false;
+
+void(* softReset) (void) = 0; //declare reset function at address 0
+
 void setup()
 {
 	pinMode(buttonPin, INPUT_PULLUP);
 	pinMode(restestEnablePin, OUTPUT);
 	pinMode(backlightPin, OUTPUT);
-	digitalWrite(backlightPin, HIGH);
 	pinMode(encoderBtnPin, INPUT_PULLUP);
+	powerOn();
 
 	#ifdef DEBUG
-	Serial.begin(9600);
+	Serial.begin(115200);
 	Serial.println("---------- Booted ----------");
 	#endif
 	lcd.clear();
@@ -121,21 +126,88 @@ float readVoltage(int pin)
 }
 
 int heatLevel = 0;
+unsigned long heatStartedTime = 0;
+unsigned long overHeatTill = 0;
 void heat(int level)
 {
-	heatLevel = level;
-	analogWrite(heatPin, level);
+	if (overHeatTill > millis()) {
+		level = 0;
+	}
+	if (level == 0 || powered) {
+		heatLevel = level;
+		analogWrite(heatPin, level);
+	}
+}
+void handleHeat()
+{
+	if (heatLevel == 0) {
+		heatStartedTime = 0;
+	} else {
+		unsigned long now = millis();
+		if (heatStartedTime == 0) {
+			heatStartedTime = now;
+		} else if (heatLevel > 0 && heatStartedTime > 0) {
+			if (heatStartedTime + 5000 < now) {
+				heat(0);
+				overHeatTill = now + 3000;
+				heatStartedTime = 0;
+			}
+		}	
+	}
 }
 
+
 byte levelValue = 0;
-boolean backlight = false;
+unsigned long lastBtnReleaseTime;
+
+void powerToggle()
+{
+	powered ? powerOff() : powerOn();
+}
+
+void powerOff()
+{
+	heat(0);
+	backlightOff();
+	powered = false;
+}
+
+void powerOn()
+{
+	powered = true;
+	backlightOn();
+}
+
+void backlightToggle()
+{
+	backlighted ? backlightOff() : backlightOn();
+}
+
+void backlightOff()
+{
+	backlighted = false;
+	digitalWrite(backlightPin, backlighted);
+}
+
+void backlightOn()
+{
+	if (powered) {
+		backlighted = true;
+		digitalWrite(backlightPin, backlighted);
+	}
+}
+
+boolean dontToggleBacklight = false;
 
 void loop()
 {
 	encoderBtn.listen();
 	if (encoderBtn.onRelease()) {
-		backlight = !backlight;
-		digitalWrite(backlightPin, backlight);
+		if (dontToggleBacklight) {
+			dontToggleBacklight = false;
+		} else {
+			backlightToggle();
+		}
 	}
 
 	AdaEncoder *enc = NULL;
@@ -144,13 +216,30 @@ void loop()
 	if (enc != NULL) {
 		levelValue = (levelValue + 101 + enc->getClearClicks()) % 101;
 	}
-	
+
 	button.listen();
 	if (button.isPressed()) {
 		heat(map(levelValue, 0, 100, 0, 255));
 	} else if(button.onRelease()) {
 		heat(0);
+
+		lastBtnReleaseTime = millis();
+		if (button.getReleaseCount() == 3 && encoderBtn.isPressed()) {
+			button.clearReleaseCount();
+			powerToggle();
+			if (powered) {
+				dontToggleBacklight = true;
+			}
+		} else if (button.getReleaseCount() == 7) {
+			softReset();
+		}
 	}
+
+	if (lastBtnReleaseTime + 500 < millis()) {
+		button.clearReleaseCount();
+	}
+
+	handleHeat();
 	
 	handleBatVoltage();
 
