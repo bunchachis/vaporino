@@ -159,6 +159,7 @@ void handleHeat()
 
 
 byte levelValue = 0;
+unsigned long btnPressedSince;
 unsigned long lastBtnReleaseTime;
 unsigned long lastEncBtnReleaseTime;
 unsigned long autooffAt = 0;
@@ -249,12 +250,18 @@ void loop()
 	}
 
 	button.listen();
-	if (button.isPressed()) {
+	if (powered && !encoderBtn.isPressed() && button.onPress()) {
+		btnPressedSince = now;
+	}
+	if (powered && !encoderBtn.isPressed() && button.isPressed()) {
+		if (btnPressedSince > 0 && btnPressedSince + 10000 <= now) {
+			powerOff();
+		}
 		heat(map(levelValue, 0, 100, 0, 255));
 		acted = true;
 	} else if(button.onRelease()) {
 		heat(0);
-
+		btnPressedSince = 0;
 		lastBtnReleaseTime = millis();
 		if (button.getReleaseCount() == 3 && encoderBtn.isPressed()) {
 			button.clearReleaseCount();
