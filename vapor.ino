@@ -161,6 +161,7 @@ void handleHeat()
 byte levelValue = 0;
 unsigned long lastBtnReleaseTime;
 unsigned long lastEncBtnReleaseTime;
+unsigned long autooffAt = 0;
 
 void powerToggle()
 {
@@ -177,6 +178,7 @@ void powerOff()
 	clearLcd();
 	lockOn();
 	powered = false;
+	autooffAt = 0;
 }
 
 void powerOn()
@@ -188,6 +190,7 @@ void powerOn()
 	lockOff();
 	delay(1000);
 	clearLcd();
+	autooffAt = 0;
 }
 
 void lockToggle()
@@ -213,9 +216,12 @@ boolean dontToggleLock = false;
 
 void loop()
 {
+	boolean acted = false;
+	unsigned long now = millis();
+
 	encoderBtn.listen();
 	if (encoderBtn.onRelease()) {
-		lastEncBtnReleaseTime = millis();
+		lastEncBtnReleaseTime = now;
 		if (encoderBtn.getReleaseCount() == 5) {
 			softReset();
 		}
@@ -224,9 +230,10 @@ void loop()
 		} else {
 			lockToggle();
 		}
+		acted = true;
 	}
 
-	if (lastEncBtnReleaseTime + 500 < millis()) {
+	if (lastEncBtnReleaseTime + 500 < now) {
 		encoderBtn.clearReleaseCount();
 	}
 	
@@ -238,11 +245,13 @@ void loop()
 		} else {
 			levelValue = (levelValue + 101 + enc->getClearClicks()) % 101;
 		}
+		acted = true;
 	}
 
 	button.listen();
 	if (button.isPressed()) {
 		heat(map(levelValue, 0, 100, 0, 255));
+		acted = true;
 	} else if(button.onRelease()) {
 		heat(0);
 
@@ -254,9 +263,10 @@ void loop()
 				dontToggleLock = true;
 			}
 		}
+		acted = true;
 	}
 
-	if (lastBtnReleaseTime + 500 < millis()) {
+	if (lastBtnReleaseTime + 500 < now) {
 		button.clearReleaseCount();
 	}
 
@@ -267,6 +277,13 @@ void loop()
 	// handleLPS();
 
 	handleLCD();
+
+	if (acted) {
+		autooffAt = now + 300000;
+	}
+	if (autooffAt > 0 && autooffAt <= now) {
+		powerOff();
+	}
 }
 
 long handleBatVoltage_old_secs = 0;
