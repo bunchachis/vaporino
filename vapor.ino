@@ -32,7 +32,7 @@ float vbat;
 float rheat;
 float rbat;
 
-boolean backlighted = false;
+boolean locked = true;
 boolean powered = false;
 
 void(* softReset) (void) = 0; //declare reset function at address 0
@@ -87,6 +87,8 @@ void setup()
 	lcd.print((int)(rbat * 1000));
 	lcd.print('m');
 	lcd.print((char)0xF4);
+
+	powerOff();
 }
 
 float readHeatResistance()
@@ -159,6 +161,7 @@ void handleHeat()
 
 byte levelValue = 0;
 unsigned long lastBtnReleaseTime;
+unsigned long lastEncBtnReleaseTime;
 
 void powerToggle()
 {
@@ -168,53 +171,64 @@ void powerToggle()
 void powerOff()
 {
 	heat(0);
-	backlightOff();
+	lockOn();
 	powered = false;
 }
 
 void powerOn()
 {
 	powered = true;
-	backlightOn();
+	lockOff();
 }
 
-void backlightToggle()
+void lockToggle()
 {
-	backlighted ? backlightOff() : backlightOn();
+	locked ? lockOff() : lockOn();
 }
 
-void backlightOff()
-{
-	backlighted = false;
-	digitalWrite(backlightPin, backlighted);
-}
-
-void backlightOn()
+void lockOff()
 {
 	if (powered) {
-		backlighted = true;
-		digitalWrite(backlightPin, backlighted);
+		locked = false;
+		digitalWrite(backlightPin, true);
 	}
 }
 
-boolean dontToggleBacklight = false;
+void lockOn()
+{
+	locked = true;
+	digitalWrite(backlightPin, false);
+}
+
+boolean dontToggleLock = false;
 
 void loop()
 {
 	encoderBtn.listen();
 	if (encoderBtn.onRelease()) {
-		if (dontToggleBacklight) {
-			dontToggleBacklight = false;
+		lastEncBtnReleaseTime = millis();
+		if (encoderBtn.getReleaseCount() == 5) {
+			softReset();
+		}
+		if (dontToggleLock) {
+			dontToggleLock = false;
 		} else {
-			backlightToggle();
+			lockToggle();
 		}
 	}
 
+	if (lastEncBtnReleaseTime + 500 < millis()) {
+		encoderBtn.clearReleaseCount();
+	}
+	
 	AdaEncoder *enc = NULL;
-	boolean changed = false;
 	enc = AdaEncoder::genie();
 	if (enc != NULL) {
-		levelValue = (levelValue + 101 + enc->getClearClicks()) % 101;
+		if (locked) {
+			enc->getClearClicks();
+		} else {
+			levelValue = (levelValue + 101 + enc->getClearClicks()) % 101;
+		}
 	}
 
 	button.listen();
@@ -228,10 +242,8 @@ void loop()
 			button.clearReleaseCount();
 			powerToggle();
 			if (powered) {
-				dontToggleBacklight = true;
+				dontToggleLock = true;
 			}
-		} else if (button.getReleaseCount() == 7) {
-			softReset();
 		}
 	}
 
