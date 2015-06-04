@@ -34,6 +34,12 @@ float rbat;
 
 boolean locked = true;
 boolean powered = false;
+boolean handleLCD_firstTime = true;
+void clearLcd()
+{
+	lcd.clear();
+	handleLCD_firstTime = true;
+}
 
 void(* softReset) (void) = 0; //declare reset function at address 0
 
@@ -43,30 +49,26 @@ void setup()
 	pinMode(restestEnablePin, OUTPUT);
 	pinMode(backlightPin, OUTPUT);
 	pinMode(encoderBtnPin, INPUT_PULLUP);
-	powerOn();
-
+	
 	#ifdef DEBUG
 	Serial.begin(115200);
 	Serial.println("---------- Booted ----------");
 	#endif
-	lcd.clear();
+	lcd.begin(16, 2);
 
-	delay(500);
+	powerOn();
+
+	lcd.setCursor(2, 0);
+	lcd.print("Initializing");
 
 	rheat = readHeatResistance();
 	#ifdef DEBUG
 	Serial.print("Rheat = ");
 	Serial.println(rheat);
 	#endif
-	lcd.begin(16, 2);
-	lcd.setCursor(0, 0);
-	lcd.print(rheat);
-	lcd.setCursor(3, 0);
-	lcd.print((char)0xF4);
 
-	delay(500);
+	delay(1000);
 
-	lcd.print(' ');
 	vbat = readBatVoltage();
 	#ifdef DEBUG
 	Serial.print("VBatUnload = ");
@@ -84,9 +86,6 @@ void setup()
 	Serial.print("RBat = ");
 	Serial.println(rbat);
 	#endif
-	lcd.print((int)(rbat * 1000));
-	lcd.print('m');
-	lcd.print((char)0xF4);
 
 	powerOff();
 }
@@ -171,6 +170,11 @@ void powerToggle()
 void powerOff()
 {
 	heat(0);
+	clearLcd();
+	lcd.setCursor(3, 0);
+	lcd.print("Power OFF");
+	delay(1000);
+	clearLcd();
 	lockOn();
 	powered = false;
 }
@@ -178,7 +182,12 @@ void powerOff()
 void powerOn()
 {
 	powered = true;
+	clearLcd();
+	lcd.setCursor(3, 0);
+	lcd.print("Power ON");
 	lockOff();
+	delay(1000);
+	clearLcd();
 }
 
 void lockToggle()
@@ -289,7 +298,8 @@ void handleBatVoltage()
 // int handleLCD_old_LPS;
 byte handleLCD_old_levelValue;
 float handleLCD_old_vbat;
-boolean handleLCD_firstTime = true;
+float handleLCD_old_rheat;
+float handleLCD_old_rbat;
 void handleLCD()
 {
 	// if (handleLCD_firstTime || handleLCD_old_LPS != LPS) {
@@ -298,6 +308,24 @@ void handleLCD()
 	// 	lcd.setCursor(6, 1);
 	// 	lcd.print(LPS);
 	// }
+
+	if (handleLCD_firstTime || handleLCD_old_rheat != rheat) {
+		lcd.setCursor(0, 0);
+		lcd.print("     ");
+		lcd.setCursor(0, 0);
+		lcd.print(rheat);
+		lcd.setCursor(3, 0);
+		lcd.print((char)0xF4);
+	}
+
+	if (handleLCD_firstTime || handleLCD_old_rbat != rbat) {
+		lcd.setCursor(5, 0);
+		lcd.print("      ");
+		lcd.setCursor(5, 0);
+		lcd.print((int)(rbat * 1000));
+		lcd.print('m');
+		lcd.print((char)0xF4);
+	}
 
 	if (handleLCD_firstTime || handleLCD_old_levelValue != levelValue) {
 		lcd.setCursor(0, 1);
@@ -308,7 +336,7 @@ void handleLCD()
 	}
 
 	boolean showWatts = millis() / 1000 % 4 >= 2;
-	if (handleLCD_firstTime || handleLCD_old_levelValue != levelValue || handleLCD_old_vbat != vbat) {
+	if (handleLCD_firstTime || handleLCD_old_levelValue != levelValue || handleLCD_old_vbat != vbat || handleLCD_old_rheat != rheat || handleLCD_old_rbat != rbat) {
 		lcd.setCursor(5, 1);
 		lcd.print("           ");
 		lcd.setCursor(5, 1);
@@ -344,6 +372,8 @@ void handleLCD()
 	}
 
 	// handleLCD_old_LPS = LPS;
+	handleLCD_old_rheat = rheat;
+	handleLCD_old_rbat = rbat;
 	handleLCD_old_levelValue = levelValue;
 	handleLCD_old_vbat = vbat;
 	handleLCD_firstTime = false;
