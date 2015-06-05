@@ -158,7 +158,7 @@ void handleHeat()
 }
 
 
-byte levelValue = 0;
+byte pwmValue = 0;
 unsigned long btnPressedSince;
 unsigned long lastBtnReleaseTime;
 unsigned long lastEncBtnReleaseTime;
@@ -215,6 +215,25 @@ void lockOn()
 
 boolean dontToggleLock = false;
 
+float maxPower = 0;
+void handleMaxPower()
+{
+	float rsum = rbat + rheat + heatWireResistance + heatFetResistance;
+	maxPower = sq(vbat / rsum) * rheat;
+}
+
+
+float desiredPower = 0;
+byte convertPowerToPwm(float power)
+{
+	if (power > maxPower) {
+		power = maxPower;
+	} else if (power < 0) {
+		power = 0;
+	}
+	return (byte)(power / maxPower * 255.0 + 0.5);
+}
+
 void loop()
 {
 	boolean acted = false;
@@ -244,10 +263,18 @@ void loop()
 		if (locked) {
 			enc->getClearClicks();
 		} else {
-			levelValue = (levelValue + 101 + enc->getClearClicks()) % 101;
+			desiredPower += enc->getClearClicks() * 0.5;
 		}
 		acted = true;
 	}
+
+	handleMaxPower();
+	if (desiredPower > maxPower) {
+		desiredPower = (int)(maxPower * 2) * 0.5;
+	} else if (desiredPower < 0) {
+		desiredPower = 0;
+	}
+	pwmValue = convertPowerToPwm(desiredPower);
 
 	button.listen();
 	if (powered && !encoderBtn.isPressed() && button.onPress()) {
@@ -257,7 +284,7 @@ void loop()
 		if (btnPressedSince > 0 && btnPressedSince + 10000 <= now) {
 			powerOff();
 		}
-		heat(map(levelValue, 0, 100, 0, 255));
+		heat(pwmValue);
 		acted = true;
 	} else if(button.onRelease()) {
 		heat(0);
@@ -320,7 +347,7 @@ void handleBatVoltage()
 
 
 // int handleLCD_old_LPS;
-byte handleLCD_old_levelValue;
+byte handleLCD_old_pwmValue;
 float handleLCD_old_vbat;
 float handleLCD_old_rheat;
 float handleLCD_old_rbat;
@@ -351,42 +378,22 @@ void handleLCD()
 		lcd.print((char)0xF4);
 	}
 
-	if (handleLCD_firstTime || handleLCD_old_levelValue != levelValue) {
-		lcd.setCursor(0, 1);
-		lcd.print("    ");
-		lcd.setCursor(0, 1);
-		lcd.print(map(levelValue, 0, 100, 0, 100));
-		lcd.print('%');	
-	}
-
 	boolean showWatts = millis() / 1000 % 4 >= 2;
-	if (handleLCD_firstTime || handleLCD_old_levelValue != levelValue || handleLCD_old_vbat != vbat || handleLCD_old_rheat != rheat || handleLCD_old_rbat != rbat) {
-		lcd.setCursor(5, 1);
-		lcd.print("           ");
-		lcd.setCursor(5, 1);
-		float rsum = rbat + rheat + heatWireResistance + heatFetResistance;
-		#ifdef DEBUG
-		Serial.println("Watts:");
-		Serial.print("vbat = ");
-		Serial.println(vbat);
-		Serial.print("rsum = ");
-		Serial.println(rsum);
-		#endif
-		float ipeak = vbat / rsum;
-		#ifdef DEBUG
-		Serial.print("ipeak = ");
-		Serial.println(ipeak);
-		#endif
-		float pheatavg = levelValue / 100.0 * sq(ipeak) * rheat;
-		#ifdef DEBUG
-		Serial.print("pheatavg = ");
-		Serial.println(pheatavg);
-		Serial.println("/ Watts");
-		#endif
-		lcd.print(sqrt(pheatavg * rheat));
-		lcd.print("V ");
-		lcd.print(pheatavg);
-		lcd.print('W');
+	if (handleLCD_firstTime || handleLCD_old_pwmValue != pwmValue || handleLCD_old_vbat != vbat || handleLCD_old_rheat != rheat || handleLCD_old_rbat != rbat) {
+		lcd.setCursor(0, 1);
+		lcd.print("                ");
+		lcd.setCursor(0, 1);
+		lcd.print((int)desiredPower);
+		lcd.print('.');
+		lcd.print((int)(10 * desiredPower) % 10);
+		lcd.print("W ");
+		float vheat = sqrt(pwmValue / 255.0 * maxPower * rheat);
+		lcd.print((int)vheat);
+		lcd.print('.');
+		lcd.print((int)(10 * vheat) % 10);
+		lcd.print("V (");
+		lcd.print(pwmValue);
+		lcd.print(')');	
 	}
 
 	if (handleLCD_firstTime || handleLCD_old_vbat != vbat) {
@@ -398,7 +405,7 @@ void handleLCD()
 	// handleLCD_old_LPS = LPS;
 	handleLCD_old_rheat = rheat;
 	handleLCD_old_rbat = rbat;
-	handleLCD_old_levelValue = levelValue;
+	handleLCD_old_pwmValue = pwmValue;
 	handleLCD_old_vbat = vbat;
 	handleLCD_firstTime = false;
 }
