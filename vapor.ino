@@ -11,13 +11,12 @@ const int batDivPin = A3;
 const float batDivK = 0.5;
 const float refVoltage = 5.0;
 const int heatPin = 3;
-const int buttonPin = 2;
 const int restestEnablePin = A0;
 const int restestDivPin = A2;
 const float restestDivK = 0.5;
 const float restestRefResistance = 4.0;
 const float restestFetResistance = 0.05;
-const float heatWireResistance = 0.320;
+const float heatWireResistance = 0.0;
 const float heatFetResistance = 0.05;
 const int backlightPin = 9;
 
@@ -26,7 +25,6 @@ const int encoderBPin = 6;
 const int encoderBtnPin = 4;
 AdaEncoder encoder = AdaEncoder('x', encoderAPin, encoderBPin);
 Button encoderBtn = Button(encoderBtnPin, LOW);
-Button button = Button(buttonPin, LOW);
 
 float vbat;
 float rheat;
@@ -45,7 +43,6 @@ void(* softReset) (void) = 0; //declare reset function at address 0
 
 void setup()
 {
-	pinMode(buttonPin, INPUT_PULLUP);
 	pinMode(restestEnablePin, OUTPUT);
 	pinMode(backlightPin, OUTPUT);
 	pinMode(encoderBtnPin, INPUT_PULLUP);
@@ -242,9 +239,6 @@ void loop()
 	encoderBtn.listen();
 	if (encoderBtn.onRelease()) {
 		lastEncBtnReleaseTime = now;
-		if (encoderBtn.getReleaseCount() == 5) {
-			softReset();
-		}
 		if (dontToggleLock) {
 			dontToggleLock = false;
 		} else {
@@ -262,6 +256,9 @@ void loop()
 	if (enc != NULL) {
 		if (locked) {
 			enc->getClearClicks();
+			if (powered && encoderBtn.isPressed()) {
+				softReset();
+			}
 		} else {
 			desiredPower += enc->getClearClicks() * 0.5;
 		}
@@ -276,22 +273,21 @@ void loop()
 	}
 	pwmValue = convertPowerToPwm(desiredPower);
 
-	button.listen();
-	if (powered && !encoderBtn.isPressed() && button.onPress()) {
+	if (powered && encoderBtn.onPress()) {
 		btnPressedSince = now;
 	}
-	if (powered && !encoderBtn.isPressed() && button.isPressed()) {
+	if (powered && encoderBtn.isPressed()) {
 		if (btnPressedSince > 0 && btnPressedSince + 10000 <= now) {
 			powerOff();
 		}
 		heat(pwmValue);
 		acted = true;
-	} else if(button.onRelease()) {
+	} else if(encoderBtn.onRelease()) {
 		heat(0);
 		btnPressedSince = 0;
 		lastBtnReleaseTime = millis();
-		if (button.getReleaseCount() == 3 && encoderBtn.isPressed()) {
-			button.clearReleaseCount();
+		if (encoderBtn.getReleaseCount() == 5) {
+			encoderBtn.clearReleaseCount();
 			powerToggle();
 			if (powered) {
 				dontToggleLock = true;
@@ -301,7 +297,7 @@ void loop()
 	}
 
 	if (lastBtnReleaseTime + 500 < now) {
-		button.clearReleaseCount();
+		encoderBtn.clearReleaseCount();
 	}
 
 	handleHeat();
