@@ -3,8 +3,6 @@
 #include <AdaEncoder.h>
 #include <Button.h>
 
-//#define DEBUG
-
 LiquidCrystal lcd(8, 7, 10, 11, 12, 13);
 
 const int batDivPin = A3;
@@ -47,10 +45,6 @@ void setup()
 	pinMode(backlightPin, OUTPUT);
 	pinMode(encoderBtnPin, INPUT_PULLUP);
 	
-	#ifdef DEBUG
-	Serial.begin(115200);
-	Serial.println("---------- Booted ----------");
-	#endif
 	lcd.begin(16, 2);
 
 	powerOn();
@@ -59,30 +53,14 @@ void setup()
 	lcd.print("Initializing");
 
 	rheat = readHeatResistance();
-	#ifdef DEBUG
-	Serial.print("Rheat = ");
-	Serial.println(rheat);
-	#endif
 
 	delay(1000);
 
 	vbat = readBatVoltage();
-	#ifdef DEBUG
-	Serial.print("VBatUnload = ");
-	Serial.println(vbat);
-	#endif
 	heat(255);
 	float vl = readBatVoltage();
 	heat(0);
-	#ifdef DEBUG
-	Serial.print("VBatLoad = ");
-	Serial.println(vl);
-	#endif
 	rbat = (vbat / vl - 1) * (rheat + heatWireResistance + heatFetResistance);
-	#ifdef DEBUG
-	Serial.print("RBat = ");
-	Serial.println(rbat);
-	#endif
 
 	powerOff();
 }
@@ -95,12 +73,7 @@ float readHeatResistance()
 	float vb = readBatVoltage();
 	float vr = readRestestVoltage();
 	digitalWrite(restestEnablePin, LOW);
-	#ifdef DEBUG
-	Serial.print("Restest: vbat = ");
-	Serial.println(vb);
-	Serial.print("Restest: vres = ");
-	Serial.println(vr);
-	#endif
+
 	float resistance = (vb / vr - 1) * (restestRefResistance + restestFetResistance) - heatWireResistance;
 
 	return resistance;
@@ -304,8 +277,6 @@ void loop()
 	
 	handleBatVoltage();
 
-	// handleLPS();
-
 	handleLCD();
 
 	if (acted) {
@@ -326,36 +297,12 @@ void handleBatVoltage()
 	}
 }
 
-
-// int loops = 0;
-// int LPS = 0;
-// long handleLPS_old_secs = 0;
-// void handleLPS()
-// {
-// 	loops++;
-// 	long secs = floor(millis() / 1000.0);
-// 	if (secs != handleLPS_old_secs) {
-// 		LPS = loops;
-// 		handleLPS_old_secs = secs;
-// 		loops = 0;
-// 	}
-// }
-
-
-// int handleLCD_old_LPS;
 byte handleLCD_old_pwmValue;
 float handleLCD_old_vbat;
 float handleLCD_old_rheat;
 float handleLCD_old_rbat;
 void handleLCD()
 {
-	// if (handleLCD_firstTime || handleLCD_old_LPS != LPS) {
-	// 	lcd.setCursor(6, 1);
-	// 	lcd.print("     ");
-	// 	lcd.setCursor(6, 1);
-	// 	lcd.print(LPS);
-	// }
-
 	if (handleLCD_firstTime || handleLCD_old_rheat != rheat) {
 		lcd.setCursor(0, 0);
 		lcd.print("     ");
@@ -398,7 +345,6 @@ void handleLCD()
 		lcd.print('V');
 	}
 
-	// handleLCD_old_LPS = LPS;
 	handleLCD_old_rheat = rheat;
 	handleLCD_old_rbat = rbat;
 	handleLCD_old_pwmValue = pwmValue;
