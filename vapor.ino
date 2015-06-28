@@ -230,6 +230,7 @@ void loop()
 		if (locked) {
 			enc->getClearClicks();
 			if (powered && encoderBtn.isPressed()) {
+				heat(0);
 				softReset();
 			}
 		} else {
