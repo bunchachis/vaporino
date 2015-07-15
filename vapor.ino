@@ -5,31 +5,46 @@
 
 LiquidCrystal lcd(8, 7, 10, 11, 12, 13);
 
-const int batDivPin = A3;
-const float batDivK = 0.5;
-const float refVoltage = 5.0;
-const int heatPin = 3;
-const int restestEnablePin = A0;
-const int restestDivPin = A2;
-const float restestDivK = 0.5;
-const float restestRefResistance = 4.0;
-const float restestFetResistance = 0.05;
-const float heatFetResistance = 0.05;
-const int backlightPin = 9;
+#define batDivPin A3
+#define batDivK 0.5
+#define refVoltage 5.0
+#define heatPin 3
+#define restestEnablePin A0
+#define restestDivPin A2
+#define restestDivK 0.5
+#define restestRefResistance 4.0
+#define restestFetResistance 0.05
+#define heatFetResistance 0.05
+#define backlightPin 9
 
-const int encoderAPin = 5;
-const int encoderBPin = 6;
-const int encoderBtnPin = 4;
+#define encoderAPin 5
+#define encoderBPin 6
+#define encoderBtnPin 4
 AdaEncoder encoder = AdaEncoder('x', encoderAPin, encoderBPin);
 Button encoderBtn = Button(encoderBtnPin, LOW);
 
-float vbat;
-float rheat;
-float rbat;
+float batVoltage;
+float heatResistance;
+float batResistance;
 
 boolean locked = true;
 boolean powered = false;
 boolean handleLCD_firstTime = true;
+float desiredPower = 0;
+
+byte heatLevel = 0;
+byte pwmValue = 0;
+unsigned long heatStartedTime = 0;
+unsigned long overHeatTill = 0;
+unsigned long btnPressedSince;
+unsigned long lastBtnReleaseTime;
+unsigned long lastEncBtnReleaseTime;
+unsigned long autooffAt = 0;
+
+boolean dontToggleLock = false;
+
+float maxPower = 0;
+
 void clearLcd()
 {
 	lcd.clear();
@@ -40,8 +55,12 @@ void(* softReset) (void) = 0; //declare reset function at address 0
 
 void setup()
 {
+	pinMode(heatPin, OUTPUT);
+	digitalWrite(heatPin, 0);
 	pinMode(restestEnablePin, OUTPUT);
+	digitalWrite(restestEnablePin, 0);
 	pinMode(backlightPin, OUTPUT);
+	digitalWrite(backlightPin, 0);
 	pinMode(encoderBtnPin, INPUT_PULLUP);
 	
 	lcd.begin(16, 2);
@@ -51,17 +70,28 @@ void setup()
 	lcd.setCursor(2, 0);
 	lcd.print("Initializing");
 
-	rheat = readHeatResistance();
+	heatResistance = readHeatResistance();
 
-	delay(1000);
+	delay(1000); // wait for supply cap refill
 
-	vbat = readBatVoltage();
-	heat(255);
-	float vl = readBatVoltage();
-	heat(0);
-	rbat = (vbat / vl - 1) * (rheat + heatFetResistance);
+	batVoltage = readBatVoltage();
+	batResistance = readBatResistance();
 
 	powerOff();
+}
+
+float readBatResistance()
+{
+	heat(0);
+
+	float unloadedVoltage = readBatVoltage();
+	heat(255);
+	float loadedVoltage = readBatVoltage();
+	heat(0);
+	
+	float resistance = (unloadedVoltage / loadedVoltage - 1) * (heatResistance + heatFetResistance);
+
+	return resistance;
 }
 
 float readHeatResistance()
@@ -95,9 +125,6 @@ float readVoltage(int pin)
 	return analogRead(pin) * refVoltage / 1023.0;
 }
 
-int heatLevel = 0;
-unsigned long heatStartedTime = 0;
-unsigned long overHeatTill = 0;
 void heat(int level)
 {
 	if (overHeatTill > millis()) {
@@ -126,13 +153,6 @@ void handleHeat()
 	}
 }
 
-
-byte pwmValue = 0;
-unsigned long btnPressedSince;
-unsigned long lastBtnReleaseTime;
-unsigned long lastEncBtnReleaseTime;
-unsigned long autooffAt = 0;
-
 void powerToggle()
 {
 	powered ? powerOff() : powerOn();
@@ -142,6 +162,7 @@ void powerOff()
 {
 	heat(0);
 	clearLcd();
+	digitalWrite(backlightPin, true);
 	lcd.setCursor(3, 0);
 	lcd.print("Power OFF");
 	delay(1000);
@@ -182,17 +203,12 @@ void lockOn()
 	digitalWrite(backlightPin, false);
 }
 
-boolean dontToggleLock = false;
-
-float maxPower = 0;
 void handleMaxPower()
 {
-	float rsum = rbat + rheat + heatFetResistance;
-	maxPower = sq(vbat / rsum) * rheat;
+	float rsum = batResistance + heatResistance + heatFetResistance;
+	maxPower = sq(batVoltage / rsum) * heatResistance;
 }
 
-
-float desiredPower = 0;
 byte convertPowerToPwm(float power)
 {
 	if (power > maxPower) {
@@ -287,42 +303,44 @@ void loop()
 	}
 }
 
-long handleBatVoltage_old_secs = 0;
 void handleBatVoltage()
 {
+	static long old_secs = 0;
+
 	long secs = floor(millis() / 100.0);
-	if (secs != handleBatVoltage_old_secs && heatLevel == 0) {
-		vbat = readBatVoltage();
-		handleBatVoltage_old_secs = secs;
+	if (secs != old_secs && heatLevel == 0) {
+		batVoltage = readBatVoltage();
+		old_secs = secs;
 	}
 }
 
-byte handleLCD_old_pwmValue;
-float handleLCD_old_vbat;
-float handleLCD_old_rheat;
-float handleLCD_old_rbat;
 void handleLCD()
 {
-	if (handleLCD_firstTime || handleLCD_old_rheat != rheat) {
+	static byte old_pwmValue;
+	static float old_batVoltage;
+	static float old_heatResistance;
+	static float old_batResistance;
+
+	if (handleLCD_firstTime || old_heatResistance != heatResistance) {
 		lcd.setCursor(0, 0);
 		lcd.print("     ");
 		lcd.setCursor(0, 0);
-		lcd.print(rheat);
+		lcd.print(heatResistance);
 		lcd.setCursor(3, 0);
 		lcd.print((char)0xF4);
 	}
 
-	if (handleLCD_firstTime || handleLCD_old_rbat != rbat) {
+	if (handleLCD_firstTime || old_batResistance != batResistance) {
 		lcd.setCursor(5, 0);
 		lcd.print("      ");
 		lcd.setCursor(5, 0);
-		lcd.print((int)(rbat * 1000));
+		lcd.print((int)(batResistance * 1000));
 		lcd.print('m');
 		lcd.print((char)0xF4);
 	}
 
 	boolean showWatts = millis() / 1000 % 4 >= 2;
-	if (handleLCD_firstTime || handleLCD_old_pwmValue != pwmValue || handleLCD_old_vbat != vbat || handleLCD_old_rheat != rheat || handleLCD_old_rbat != rbat) {
+	if (handleLCD_firstTime || old_pwmValue != pwmValue || old_batVoltage != batVoltage || old_heatResistance != heatResistance || old_batResistance != batResistance) {
 		lcd.setCursor(0, 1);
 		lcd.print("                ");
 		lcd.setCursor(0, 1);
@@ -330,7 +348,7 @@ void handleLCD()
 		lcd.print('.');
 		lcd.print((int)(10 * desiredPower) % 10);
 		lcd.print("W ");
-		float vheat = sqrt(pwmValue / 255.0 * maxPower * rheat);
+		float vheat = sqrt(pwmValue / 255.0 * maxPower * heatResistance);
 		lcd.print((int)vheat);
 		lcd.print('.');
 		lcd.print((int)(10 * vheat) % 10);
@@ -339,15 +357,15 @@ void handleLCD()
 		lcd.print(')');	
 	}
 
-	if (handleLCD_firstTime || handleLCD_old_vbat != vbat) {
+	if (handleLCD_firstTime || old_batVoltage != batVoltage) {
 		lcd.setCursor(11, 0);
-		lcd.print(vbat);
+		lcd.print(batVoltage);
 		lcd.print('V');
 	}
 
-	handleLCD_old_rheat = rheat;
-	handleLCD_old_rbat = rbat;
-	handleLCD_old_pwmValue = pwmValue;
-	handleLCD_old_vbat = vbat;
+	old_heatResistance = heatResistance;
+	old_batResistance = batResistance;
+	old_pwmValue = pwmValue;
+	old_batVoltage = batVoltage;
 	handleLCD_firstTime = false;
 }
