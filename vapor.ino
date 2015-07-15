@@ -14,7 +14,6 @@ const int restestDivPin = A2;
 const float restestDivK = 0.5;
 const float restestRefResistance = 4.0;
 const float restestFetResistance = 0.05;
-const float heatWireResistance = 0.0;
 const float heatFetResistance = 0.05;
 const int backlightPin = 9;
 
@@ -60,7 +59,7 @@ void setup()
 	heat(255);
 	float vl = readBatVoltage();
 	heat(0);
-	rbat = (vbat / vl - 1) * (rheat + heatWireResistance + heatFetResistance);
+	rbat = (vbat / vl - 1) * (rheat + heatFetResistance);
 
 	powerOff();
 }
@@ -74,7 +73,7 @@ float readHeatResistance()
 	float vr = readRestestVoltage();
 	digitalWrite(restestEnablePin, LOW);
 
-	float resistance = (vb / vr - 1) * (restestRefResistance + restestFetResistance) - heatWireResistance;
+	float resistance = (vb / vr - 1) * (restestRefResistance + restestFetResistance);
 
 	return resistance;
 }
@@ -188,7 +187,7 @@ boolean dontToggleLock = false;
 float maxPower = 0;
 void handleMaxPower()
 {
-	float rsum = rbat + rheat + heatWireResistance + heatFetResistance;
+	float rsum = rbat + rheat + heatFetResistance;
 	maxPower = sq(vbat / rsum) * rheat;
 }
 
