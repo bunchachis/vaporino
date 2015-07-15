@@ -16,12 +16,21 @@ LiquidCrystal lcd(8, 7, 10, 11, 12, 13);
 #define restestFetResistance 0.05
 #define heatFetResistance 0.05
 #define backlightPin 9
-
 #define encoderAPin 5
 #define encoderBPin 6
-#define encoderBtnPin 4
+#define btnPin 4
 AdaEncoder encoder = AdaEncoder('x', encoderAPin, encoderBPin);
-Button encoderBtn = Button(encoderBtnPin, LOW);
+Button btn = Button(btnPin, LOW);
+
+/* Timings (ms) */
+#define messageDelay 1000
+#define maxHeatDelay 5000
+#define overHeatDelay 3000
+#define overPressDelay 10000
+#define shortClickDelay 250
+#define multiClickDelay 500
+#define autooffDelay 600000
+#define autolockDelay 10000
 
 float batVoltage;
 float heatResistance;
@@ -31,19 +40,15 @@ boolean locked = true;
 boolean powered = false;
 boolean handleLCD_firstTime = true;
 float desiredPower = 0;
-
+float maxPower = 0;
 byte heatLevel = 0;
 byte pwmValue = 0;
 unsigned long heatStartedTime = 0;
 unsigned long overHeatTill = 0;
 unsigned long btnPressedSince;
 unsigned long lastBtnReleaseTime;
-unsigned long lastEncBtnReleaseTime;
+unsigned long autolockAt = 0;
 unsigned long autooffAt = 0;
-
-boolean dontToggleLock = false;
-
-float maxPower = 0;
 
 #define omega (byte)0
 byte omegaGlyph[8] = {
@@ -72,7 +77,7 @@ void setup()
 	digitalWrite(restestEnablePin, 0);
 	pinMode(backlightPin, OUTPUT);
 	digitalWrite(backlightPin, 0);
-	pinMode(encoderBtnPin, INPUT_PULLUP);
+	pinMode(btnPin, INPUT_PULLUP);
 
 	lcd.createChar(omega, omegaGlyph);	
 	lcd.begin(16, 2);
@@ -147,6 +152,7 @@ void heat(int level)
 		analogWrite(heatPin, level);
 	}
 }
+
 void handleHeat()
 {
 	if (heatLevel == 0) {
@@ -156,9 +162,9 @@ void handleHeat()
 		if (heatStartedTime == 0) {
 			heatStartedTime = now;
 		} else if (heatLevel > 0 && heatStartedTime > 0) {
-			if (heatStartedTime + 5000 < now) {
+			if (heatStartedTime + maxHeatDelay < now) {
 				heat(0);
-				overHeatTill = now + 3000;
+				overHeatTill = now + overHeatDelay;
 				heatStartedTime = 0;
 			}
 		}	
@@ -177,7 +183,7 @@ void powerOff()
 	digitalWrite(backlightPin, true);
 	lcd.setCursor(3, 0);
 	lcd.print("Power OFF");
-	delay(1000);
+	delay(messageDelay);
 	clearLcd();
 	lockOn();
 	powered = false;
@@ -191,7 +197,7 @@ void powerOn()
 	lcd.setCursor(3, 0);
 	lcd.print("Power ON");
 	lockOff();
-	delay(1000);
+	delay(messageDelay);
 	clearLcd();
 	autooffAt = 0;
 }
@@ -204,6 +210,7 @@ void lockToggle()
 void lockOff()
 {
 	if (powered) {
+		autolockAt = millis() + autolockDelay;
 		locked = false;
 		digitalWrite(backlightPin, true);
 	}
@@ -211,6 +218,7 @@ void lockOff()
 
 void lockOn()
 {
+	autolockAt = 0;
 	locked = true;
 	digitalWrite(backlightPin, false);
 }
@@ -236,32 +244,19 @@ void loop()
 	boolean acted = false;
 	unsigned long now = millis();
 
-	encoderBtn.listen();
-	if (encoderBtn.onRelease()) {
-		lastEncBtnReleaseTime = now;
-		if (dontToggleLock) {
-			dontToggleLock = false;
-		} else {
-			lockToggle();
-		}
-		acted = true;
-	}
-
-	if (lastEncBtnReleaseTime + 500 < now) {
-		encoderBtn.clearReleaseCount();
-	}
+	btn.listen();
 	
 	AdaEncoder *enc = NULL;
 	enc = AdaEncoder::genie();
 	if (enc != NULL) {
-		if (locked) {
-			enc->getClearClicks();
-			if (powered && encoderBtn.isPressed()) {
+		int clicks = enc->getClearClicks();
+		if (!locked) {
+			if (btn.isPressed()) {
 				heat(0);
 				softReset();
+			} else {
+				desiredPower += clicks;
 			}
-		} else {
-			desiredPower += enc->getClearClicks();
 		}
 		acted = true;
 	}
@@ -274,46 +269,51 @@ void loop()
 	}
 	pwmValue = convertPowerToPwm(desiredPower);
 
-	if (powered && encoderBtn.onPress()) {
+	if (powered && btn.onPress()) {
 		btnPressedSince = now;
 	}
-	if (powered && encoderBtn.isPressed()) {
-		if (btnPressedSince > 0 && btnPressedSince + 10000 <= now) {
+	if (powered && btn.isPressed()) {
+		if (btnPressedSince > 0 && btnPressedSince + overPressDelay <= now) {
 			powerOff();
 		}
-		heat(pwmValue);
-		acted = true;
-	} else if(encoderBtn.onRelease()) {
-		heat(0);
-		btnPressedSince = 0;
-		lastBtnReleaseTime = millis();
-		if (encoderBtn.getReleaseCount() == 5) {
-			encoderBtn.clearReleaseCount();
-			powerToggle();
-			if (powered) {
-				dontToggleLock = true;
-			}
+		if (btnPressedSince + shortClickDelay <= now) {
+			heat(pwmValue);
 		}
 		acted = true;
+	} else if(btn.onRelease()) {
+		heat(0);
+		lastBtnReleaseTime = millis();
+		if (btn.getReleaseCount() == 5) {
+			btn.clearReleaseCount();
+			powerToggle();
+		}
+		if (powered && btnPressedSince + shortClickDelay > now) {
+			lockOff();
+		}
+		btnPressedSince = 0;
+		acted = true;
 	}
 
-	if (lastBtnReleaseTime + 500 < now) {
-		encoderBtn.clearReleaseCount();
-	}
-
-	handleHeat();
-	
-	handleBatVoltage();
-
-	if (powered) {
-		handleLCD();
+	if (lastBtnReleaseTime + multiClickDelay < now) {
+		btn.clearReleaseCount();
 	}
 
 	if (acted) {
-		autooffAt = now + 300000;
+		autolockAt = now + autolockDelay;
+		autooffAt = now + autooffDelay;
 	}
-	if (autooffAt > 0 && autooffAt <= now) {
-		powerOff();
+
+	if (powered) {
+		handleHeat();
+		handleBatVoltage();
+		handleLCD();
+		if (autolockAt > 0 && autolockAt <= now) {
+			lockOn();
+		}
+
+		if (autooffAt > 0 && autooffAt <= now) {
+			powerOff();
+		}
 	}
 }
 
