@@ -61,6 +61,64 @@ byte omegaGlyph[8] = {
   B11011,
 };
 
+byte glyphs[7][8] = {{
+	B10000,
+	B10000,
+	B11111,
+	B10001,
+	B10001,
+	B11111,
+	B00000,
+}, {
+	B00000,
+	B00000,
+	B10001,
+	B10001,
+	B10001,
+	B11111,
+	B00000,
+}, {
+	B00000,
+	B00000,
+	B11111,
+	B10001,
+	B10001,
+	B10001,
+	B00000,
+}, {
+	B00000,
+	B00000,
+	B11111,
+	B10000,
+	B10000,
+	B11111,
+	B00000,
+}, {
+	B10000,
+	B10000,
+	B11111,
+	B10001,
+	B10001,
+	B10001,
+	B00000,
+}, {
+	B00000,
+	B00000,
+	B11111,
+	B10001,
+	B10011,
+	B11101,
+	B00000,
+}, {
+	B00000,
+	B10000,
+	B11000,
+	B11100,
+	B11000,
+	B10000,
+	B00000,
+}};
+
 void clearLcd()
 {
 	lcd.clear();
@@ -79,7 +137,14 @@ void setup()
 	digitalWrite(backlightPin, 0);
 	pinMode(btnPin, INPUT_PULLUP);
 
-	lcd.createChar(omega, omegaGlyph);	
+	lcd.createChar(omega, omegaGlyph);
+	lcd.createChar(1, glyphs[0]);
+	lcd.createChar(2, glyphs[1]);
+	lcd.createChar(3, glyphs[2]);
+	lcd.createChar(4, glyphs[3]);
+	lcd.createChar(5, glyphs[4]);
+	lcd.createChar(6, glyphs[5]);
+	lcd.createChar(7, glyphs[6]);
 	lcd.begin(16, 2);
 
 	powerOn();
@@ -336,18 +401,17 @@ void handleLCD()
 	static float old_batResistance;
 
 	if (handleLCD_firstTime || old_heatResistance != heatResistance) {
-		lcd.setCursor(0, 0);
+		lcd.setCursor(0, 1);
 		lcd.print("     ");
-		lcd.setCursor(0, 0);
+		lcd.setCursor(0, 1);
 		lcd.print(heatResistance);
-		lcd.setCursor(3, 0);
 		lcd.write(byte(0));
 	}
 
 	if (handleLCD_firstTime || old_batResistance != batResistance) {
-		lcd.setCursor(5, 0);
+		lcd.setCursor(6, 1);
 		lcd.print("      ");
-		lcd.setCursor(5, 0);
+		lcd.setCursor(6, 1);
 		lcd.print((int)(batResistance * 1000));
 		lcd.print('m');
 		lcd.write(byte(0));
@@ -355,9 +419,9 @@ void handleLCD()
 
 	boolean showWatts = millis() / 1000 % 4 >= 2;
 	if (handleLCD_firstTime || old_pwmValue != pwmValue || old_batVoltage != batVoltage || old_heatResistance != heatResistance || old_batResistance != batResistance) {
-		lcd.setCursor(0, 1);
-		lcd.print("                ");
-		lcd.setCursor(0, 1);
+		lcd.setCursor(8, 0);
+		lcd.print("         ");
+		lcd.setCursor(desiredPower >= 10 ? 8 : 9, 0);
 		lcd.print((int)desiredPower);
 		lcd.print("W ");
 		float vheat = sqrt(pwmValue / 255.0 * maxPower * heatResistance);
@@ -368,9 +432,22 @@ void handleLCD()
 	}
 
 	if (handleLCD_firstTime || old_batVoltage != batVoltage) {
-		lcd.setCursor(11, 0);
-		lcd.print(batVoltage);
+		lcd.setCursor(12, 1);
+		lcd.print((int)batVoltage);
+		lcd.print('.');
+		lcd.print((int)(10 * batVoltage) % 10);
 		lcd.print('V');
+	}
+
+	if (handleLCD_firstTime) {
+		lcd.setCursor(0, 0);
+		lcd.write(1);
+		lcd.write(2);
+		lcd.write(3);
+		lcd.write(4);
+		lcd.write(5);
+		lcd.write(6);
+		lcd.write(7);
 	}
 
 	old_heatResistance = heatResistance;
