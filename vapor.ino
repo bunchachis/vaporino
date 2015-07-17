@@ -31,6 +31,7 @@ Button btn = Button(btnPin, LOW);
 #define multiClickDelay 500
 #define autooffDelay 600000
 #define autolockDelay 10000
+#define capRefillDelay 5000
 
 float batVoltage;
 float heatResistance;
@@ -370,8 +371,9 @@ void loop()
 
 	if (powered) {
 		handleHeat();
-		handleBatVoltage();
+		handleBatVoltage(now);
 		handleLCD();
+
 		if (autolockAt > 0 && autolockAt <= now) {
 			lockOn();
 		}
@@ -382,12 +384,12 @@ void loop()
 	}
 }
 
-void handleBatVoltage()
+void handleBatVoltage(unsigned long now)
 {
 	static long old_secs = 0;
 
-	long secs = floor(millis() / 100.0);
-	if (secs != old_secs && heatLevel == 0) {
+	long secs = now / 1000;
+	if (secs != old_secs && heatLevel == 0 && lastBtnReleaseTime + capRefillDelay < now) {
 		batVoltage = readBatVoltage();
 		old_secs = secs;
 	}
